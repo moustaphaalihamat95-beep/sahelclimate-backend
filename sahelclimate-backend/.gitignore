@@ -1,0 +1,16 @@
+# Dependances
+node_modules/
+.next/
+
+# Python & Envs
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Builds & OS
+dist/
+build/
+*.log
+.DS_Store

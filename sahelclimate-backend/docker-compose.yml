@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: sahelclimate_db
+    restart: always
+    environment:
+      POSTGRES_USER: sahel_user
+      POSTGRES_PASSWORD: sahel_password
+      POSTGRES_DB: sahelclimate_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  web:
+    build: .
+    container_name: sahelclimate_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://sahel_user:sahel_password@db:5432/sahelclimate_db
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
