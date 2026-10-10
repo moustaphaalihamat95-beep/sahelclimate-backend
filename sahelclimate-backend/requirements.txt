@@ -5,3 +5,5 @@ sqlalchemy
 twilio
 email-validator
 requests
+openpyxl
+reportlab
