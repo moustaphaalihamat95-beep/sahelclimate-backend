@@ -2,4 +2,6 @@ fastapi
 uvicorn
 pydantic
 sqlalchemy
+twilio
 email-validator
+requests
