@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import random
+import os
+import base64
+from openai import OpenAI
 
 app = FastAPI(title="SahelClimate API")
 
@@ -12,6 +15,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialisation du client OpenAI (nécessite la variable d'environnement OPENAI_API_KEY sur Render)
+client = OpenAI()
 
 verification_codes = {}
 
@@ -64,3 +70,63 @@ def get_trainings():
 @app.get("/community")
 def get_community():
     return []
+
+# --- NOUVEAUX MODULES IA ---
+
+@app.post("/ai/voice-to-text")
+async def voice_to_text(file: UploadFile = File(...)):
+    """Convertit un message vocal d'agriculteur en texte via Whisper."""
+    temp_audio_path = f"temp_{file.filename}"
+    try:
+        with open(temp_audio_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        with open(temp_audio_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="fr"
+            )
+
+        os.remove(temp_audio_path)
+        return {"success": True, "text": transcript.text}
+
+    except Exception as e:
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
+        raise HTTPException(status_code=500, detail=f"Erreur transcription vocale : {str(e)}")
+
+@app.post("/ai/analyze-plant-image")
+async def analyze_plant_image(file: UploadFile = File(...)):
+    """Analyse une photo de culture pour diagnostiquer une maladie (GPT-4o)."""
+    try:
+        image_bytes = await file.read()
+        encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un agronome expert en cultures sahéliennes. Analyse cette image de plante, identifie la maladie ou le problème nutritionnel, et donne des conseils de traitement écologiques et pratiques adaptés au Sahel."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Quel est le problème sur cette culture et comment le soigner ?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{encoded_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=500
+        )
+
+        return {"success": True, "diagnosis": response.choices[0].message.content}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur d'analyse d'image : {str(e)}")
