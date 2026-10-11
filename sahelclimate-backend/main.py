@@ -20,7 +20,7 @@ app.add_middleware(
 
 client = OpenAI()
 
-# --- Bases de données en mémoire ---
+# --- Base de données Parcelles avec Coordonnées GPS ---
 parcels_db = [
     {
         "id": 1,
@@ -28,7 +28,9 @@ parcels_db = [
         "area_ha": 2.5,
         "crop_type": "Mil (Sorgho)",
         "location": "Moussoro, Barh El Gazel",
-        "status": "Irrigation active"
+        "status": "Irrigation active",
+        "lat": 13.6405,
+        "lng": 16.4901
     },
     {
         "id": 2,
@@ -36,7 +38,9 @@ parcels_db = [
         "area_ha": 1.2,
         "crop_type": "Sésame",
         "location": "Moussoro, Barh El Gazel",
-        "status": "Sous observation"
+        "status": "Sous observation",
+        "lat": 13.6450,
+        "lng": 16.4950
     }
 ]
 
@@ -109,6 +113,8 @@ class ParcelCreateRequest(BaseModel):
     area_ha: float
     crop_type: str
     location: str
+    lat: Optional[float] = 13.6405
+    lng: Optional[float] = 16.4901
 
 class CommunityPostRequest(BaseModel):
     author: str
@@ -119,12 +125,10 @@ class CommunityPostRequest(BaseModel):
 def read_root():
     return {"message": "Tumaï Green Sahel API est opérationnelle"}
 
-# --- Route Météo & Alertes ---
 @app.get("/weather")
 def get_weather():
     return weather_data
 
-# --- Routes Parcelles ---
 @app.get("/parcels")
 def get_parcels():
     return parcels_db
@@ -137,17 +141,17 @@ def create_parcel(parcel: ParcelCreateRequest):
         "area_ha": parcel.area_ha,
         "crop_type": parcel.crop_type,
         "location": parcel.location,
-        "status": "En attente"
+        "status": "En attente",
+        "lat": parcel.lat or 13.6405,
+        "lng": parcel.lng or 16.4901
     }
     parcels_db.append(new_parcel)
     return {"success": True, "parcel": new_parcel}
 
-# --- Routes Formations ---
 @app.get("/trainings")
 def get_trainings():
     return trainings_db
 
-# --- Routes Communauté ---
 @app.get("/community")
 def get_community():
     return community_posts_db
@@ -164,7 +168,6 @@ def create_community_post(post: CommunityPostRequest):
     community_posts_db.insert(0, new_post)
     return {"success": True, "post": new_post}
 
-# --- Routes IA ---
 @app.post("/ai/voice-to-text")
 async def voice_to_text(file: UploadFile = File(...)):
     temp_audio_path = f"temp_{file.filename}"
