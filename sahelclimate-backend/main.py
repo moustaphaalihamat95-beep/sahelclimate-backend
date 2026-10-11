@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import random
 import os
 import base64
+from typing import List, Optional
 from openai import OpenAI
 
 app = FastAPI(title="SahelClimate API")
@@ -18,121 +19,125 @@ app.add_middleware(
 )
 
 client = OpenAI()
-verification_codes = {}
 
-class PhoneRegisterRequest(BaseModel):
+# --- Bases de données en mémoire ---
+parcels_db = [
+    {
+        "id": 1,
+        "name": "Parcelle Moussoro Est",
+        "area_ha": 2.5,
+        "crop_type": "Mil (Sorgho)",
+        "location": "Moussoro, Barh El Gazel",
+        "status": "Irrigation active"
+    },
+    {
+        "id": 2,
+        "name": "Champ Nord - Sésame",
+        "area_ha": 1.2,
+        "crop_type": "Sésame",
+        "location": "Moussoro, Barh El Gazel",
+        "status": "Sous observation"
+    }
+]
+
+trainings_db = [
+    {
+        "id": 1,
+        "title": "Techniques de Compostage Rapide au Sahel",
+        "category": "Agro-écologie",
+        "duration": "15 min",
+        "summary": "Fabriquer un compost riche à partir de fumier local et de débris végétaux sans gaspiller d'eau."
+    },
+    {
+        "id": 2,
+        "title": "Gestion Optimisée de l'Eau de Pluie",
+        "category": "Irrigation",
+        "duration": "20 min",
+        "summary": "Techniques de demi-lunes et zaï pour capturer l'eau et revitaliser les sols arides."
+    },
+    {
+        "id": 3,
+        "title": "Biopesticides Naturels à Base de Neem",
+        "category": "Protection des Cultures",
+        "duration": "10 min",
+        "summary": "Préparer une solution répulsive contre les chenilles et pucerons sans produits chimiques."
+    }
+]
+
+community_posts_db = [
+    {
+        "id": 1,
+        "author": "Mahamat A.",
+        "location": "Moussoro",
+        "message": "Alerte : Détection de chenilles processionnaires sur le sorgho au sud du canton. Pensez au traitement bio neem !",
+        "date": "Aujourd'hui"
+    },
+    {
+        "id": 2,
+        "author": "Fatimé Z.",
+        "location": "Barh El Gazel",
+        "message": "Les demi-lunes créées le mois dernier ont super bien retenu la dernière pluie. Très satisfaite du résultat.",
+        "date": "Hier"
+    }
+]
+
+# --- Modèles Pydantic ---
+class ParcelCreateRequest(BaseModel):
     name: str
-    phone: str
-    password: str
+    area_ha: float
+    crop_type: str
+    location: str
 
-class PhoneConfirmRequest(BaseModel):
-    phone: str
-    confirmation_code: str
+class CommunityPostRequest(BaseModel):
+    author: str
+    location: str
+    message: str
 
-class PhoneLoginRequest(BaseModel):
-    phone: str
-    password: str
-
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def read_root():
-    return """
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Tumaï Green Sahel - Test IA</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 650px; margin: 40px auto; padding: 20px; background: #f4f7f6; color: #333; }
-            .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            h1 { color: #1b5e20; text-align: center; }
-            h2 { color: #2e7d32; font-size: 1.2rem; }
-            button { background: #2e7d32; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-            button:hover { background: #1b5e20; }
-            pre { background: #e8f5e9; padding: 12px; border-radius: 4px; white-space: pre-wrap; font-family: inherit; margin-top: 10px; }
-            input[type="file"] { margin-bottom: 10px; }
-        </style>
-    </head>
-    <body>
-        <h1>🌱 Tumaï Green Sahel</h1>
-        <p style="text-align: center; color: #666;">Interface de test des modules IA (Vision & Voix)</p>
-        
-        <div class="card">
-            <h2>1. Analyse de Plante (Diagnostic Maladie)</h2>
-            <input type="file" id="plantImage" accept="image/*"><br>
-            <button onclick="analyzePlant()">Analyser la photo</button>
-            <pre id="plantResult">Le diagnostic de l'agronome apparaîtra ici...</pre>
-        </div>
+    return {"message": "Tumaï Green Sahel API est opérationnelle"}
 
-        <div class="card">
-            <h2>2. Transcription Vocale (Message Agriculteur)</h2>
-            <input type="file" id="audioFile" accept="audio/*"><br>
-            <button onclick="transcribeAudio()">Transcrire l'audio</button>
-            <pre id="audioResult">La transcription texte apparaîtra ici...</pre>
-        </div>
-
-        <script>
-            async function analyzePlant() {
-                const fileInput = document.getElementById('plantImage');
-                if(fileInput.files.length === 0) { alert('Veuillez choisir une photo de plante'); return; }
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                
-                document.getElementById('plantResult').innerText = "Analyse en cours par GPT-4o...";
-                try {
-                    const res = await fetch('/ai/analyze-plant-image', { method: 'POST', body: formData });
-                    const data = await res.json();
-                    document.getElementById('plantResult').innerText = data.diagnosis || JSON.stringify(data, null, 2);
-                } catch(err) {
-                    document.getElementById('plantResult').innerText = "Erreur : " + err;
-                }
-            }
-
-            async function transcribeAudio() {
-                const fileInput = document.getElementById('audioFile');
-                if(fileInput.files.length === 0) { alert('Veuillez choisir un fichier audio'); return; }
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                
-                document.getElementById('audioResult').innerText = "Transcription en cours par Whisper...";
-                try {
-                    const res = await fetch('/ai/voice-to-text', { method: 'POST', body: formData });
-                    const data = await res.json();
-                    document.getElementById('audioResult').innerText = data.text || JSON.stringify(data, null, 2);
-                } catch(err) {
-                    document.getElementById('audioResult').innerText = "Erreur : " + err;
-                }
-            }
-        </script>
-    </body>
-    </html>
-    """
-
-@app.post("/auth/register-phone")
-def register_phone(data: PhoneRegisterRequest):
-    code = str(random.randint(1000, 9999))
-    verification_codes[data.phone] = code
-    print(f"\n[SMS SIMULÉ] Numéro: {data.phone} - CODE: {code}\n")
-    return {"message": "Code généré", "phone": data.phone}
-
-@app.post("/auth/confirm-phone")
-def confirm_phone(data: PhoneConfirmRequest):
-    if verification_codes.get(data.phone) != data.confirmation_code:
-        raise HTTPException(status_code=400, detail="Code incorrect")
-    return {"success": True}
-
-@app.post("/auth/login-phone")
-def login_phone(data: PhoneLoginRequest):
-    return {"access_token": "fake-token"}
-
+# --- Routes Parcelles ---
 @app.get("/parcels")
-def get_parcels(): return []
+def get_parcels():
+    return parcels_db
 
+@app.post("/parcels")
+def create_parcel(parcel: ParcelCreateRequest):
+    new_parcel = {
+        "id": len(parcels_db) + 1,
+        "name": parcel.name,
+        "area_ha": parcel.area_ha,
+        "crop_type": parcel.crop_type,
+        "location": parcel.location,
+        "status": "En attente"
+    }
+    parcels_db.append(new_parcel)
+    return {"success": True, "parcel": new_parcel}
+
+# --- Routes Formations ---
 @app.get("/trainings")
-def get_trainings(): return []
+def get_trainings():
+    return trainings_db
 
+# --- Routes Communauté ---
 @app.get("/community")
-def get_community(): return []
+def get_community():
+    return community_posts_db
 
+@app.post("/community")
+def create_community_post(post: CommunityPostRequest):
+    new_post = {
+        "id": len(community_posts_db) + 1,
+        "author": post.author,
+        "location": post.location,
+        "message": post.message,
+        "date": "À l'instant"
+    }
+    community_posts_db.prepend if hasattr(community_posts_db, 'prepend') else community_posts_db.insert(0, new_post)
+    return {"success": True, "post": new_post}
+
+# --- Routes IA ---
 @app.post("/ai/voice-to-text")
 async def voice_to_text(file: UploadFile = File(...)):
     temp_audio_path = f"temp_{file.filename}"
