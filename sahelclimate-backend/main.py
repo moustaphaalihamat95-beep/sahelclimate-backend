@@ -13,7 +13,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Stockage temporaire en mémoire des codes de vérification (en attendant la BDD)
 verification_codes = {}
 
 class PhoneRegisterRequest(BaseModel):
@@ -35,16 +34,12 @@ def read_root():
 
 @app.post("/auth/register-phone")
 def register_phone(data: PhoneRegisterRequest):
-    # Génération d'un code à 4 chiffres
     code = str(random.randint(1000, 9999))
     verification_codes[data.phone] = code
-    
-    # Affichage du code dans les logs de Render pour test direct
     print(f"\n========================================")
     print(f" [SMS SIMULÉ] Numéro: {data.phone}")
     print(f" [SMS SIMULÉ] CODE DE CONFIRMATION: {code}")
     print(f"========================================\n")
-    
     return {"message": "Code de confirmation généré", "phone": data.phone}
 
 @app.post("/auth/confirm-phone")
@@ -57,3 +52,15 @@ def confirm_phone(data: PhoneConfirmRequest):
 @app.post("/auth/login-phone")
 def login_phone(data: PhoneLoginRequest):
     return {"access_token": "fake-token-sahel", "token_type": "bearer"}
+
+@app.get("/parcels")
+def get_parcels():
+    return []
+
+@app.get("/trainings")
+def get_trainings():
+    return []
+
+@app.get("/community")
+def get_community():
+    return []
