@@ -81,6 +81,28 @@ community_posts_db = [
     }
 ]
 
+weather_data = {
+    "location": "Moussoro / Barh El Gazel",
+    "temperature": "36°C",
+    "humidity": "28%",
+    "wind": "18 km/h (Harmattan)",
+    "condition": "Ensoleillé / Vent de sable léger",
+    "alerts": [
+        {
+            "id": 1,
+            "type": "Vent / Érosion",
+            "severity": "Moyenne",
+            "message": "Vent sec (Harmattan) prévu pour les prochaines 48h. Protégez les jeunes pousses de maraîchage avec des brise-vents."
+        },
+        {
+            "id": 2,
+            "type": "Irrigation",
+            "severity": "Élevée",
+            "message": "Forte évapotranspiration. Privilégiez l'arrosage au pied des cultures tôt le matin ou après le coucher du soleil."
+        }
+    ]
+}
+
 # --- Modèles Pydantic ---
 class ParcelCreateRequest(BaseModel):
     name: str
@@ -96,6 +118,11 @@ class CommunityPostRequest(BaseModel):
 @app.get("/")
 def read_root():
     return {"message": "Tumaï Green Sahel API est opérationnelle"}
+
+# --- Route Météo & Alertes ---
+@app.get("/weather")
+def get_weather():
+    return weather_data
 
 # --- Routes Parcelles ---
 @app.get("/parcels")
@@ -134,7 +161,7 @@ def create_community_post(post: CommunityPostRequest):
         "message": post.message,
         "date": "À l'instant"
     }
-    community_posts_db.prepend if hasattr(community_posts_db, 'prepend') else community_posts_db.insert(0, new_post)
+    community_posts_db.insert(0, new_post)
     return {"success": True, "post": new_post}
 
 # --- Routes IA ---
