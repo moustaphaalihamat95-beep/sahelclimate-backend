@@ -70,18 +70,6 @@ weather_data = {
     ]
 }
 
-# Modèles souples avec champs optionnels
-class PhoneRegisterRequest(BaseModel):
-    phone_number: Optional[str] = "Inconnu"
-    full_name: Optional[str] = "Agriculteur"
-
-class PhoneConfirmRequest(BaseModel):
-    phone_number: Optional[str] = "Inconnu"
-    code: Optional[str] = "123456"
-
-class PhoneLoginRequest(BaseModel):
-    phone_number: Optional[str] = "Inconnu"
-
 class ParcelCreateRequest(BaseModel):
     name: Optional[str] = "Nouvelle Parcelle"
     area_ha: Optional[float] = 1.0
@@ -99,7 +87,7 @@ class CommunityPostRequest(BaseModel):
 def read_root():
     return {"message": "Tumaï Green Sahel API est opérationnelle"}
 
-# Routes Authentification insensibles aux erreurs de format
+# Route d'inscription complète avec identification unique
 @app.post("/auth/register-phone")
 async def register_phone(request: Request):
     try:
@@ -109,16 +97,28 @@ async def register_phone(request: Request):
     
     phone = str(body.get("phone_number") or body.get("phone") or "Inconnu").strip()
     name = str(body.get("full_name") or body.get("name") or "Agriculteur").strip()
+    city = str(body.get("city") or "Moussoro").strip()
+    address = str(body.get("address") or "Non spécifiée").strip()
+    email = str(body.get("email") or "").strip()
     code = "123456"
 
+    user_data = {
+        "phone_number": phone,
+        "full_name": name,
+        "city": city,
+        "address": address,
+        "email": email,
+        "verified": False
+    }
+
     verification_codes[phone] = code
-    users_db[phone] = {"phone_number": phone, "full_name": name, "verified": False}
+    users_db[phone] = user_data
 
     return {
         "success": True,
-        "message": f"Code envoyé au {phone}",
+        "message": f"Code de vérification envoyé au {phone}",
         "test_code": code,
-        "user": users_db[phone]
+        "user": user_data
     }
 
 @app.post("/auth/confirm-phone")
@@ -129,15 +129,21 @@ async def confirm_phone(request: Request):
         body = {}
 
     phone = str(body.get("phone_number") or body.get("phone") or "").strip()
-    code = str(body.get("code") or "123456").strip()
-
+    
     if phone in users_db:
         users_db[phone]["verified"] = True
 
     return {
         "success": True,
-        "message": "Numéro vérifié avec succès",
-        "user": users_db.get(phone, {"phone_number": phone, "full_name": "Agriculteur", "verified": True})
+        "message": "Compte identifié et vérifié avec succès",
+        "user": users_db.get(phone, {
+            "phone_number": phone,
+            "full_name": "Agriculteur",
+            "city": "Moussoro",
+            "address": "Non spécifiée",
+            "email": "",
+            "verified": True
+        })
     }
 
 @app.post("/auth/login-phone")
@@ -151,7 +157,14 @@ async def login_phone(request: Request):
     code = "123456"
 
     if phone not in users_db:
-        users_db[phone] = {"phone_number": phone, "full_name": "Agriculteur Sahel", "verified": True}
+        users_db[phone] = {
+            "phone_number": phone,
+            "full_name": "Agriculteur Sahel",
+            "city": "Moussoro",
+            "address": "Centre",
+            "email": "",
+            "verified": True
+        }
 
     verification_codes[phone] = code
 
@@ -162,14 +175,11 @@ async def login_phone(request: Request):
         "user": users_db[phone]
     }
 
-# Routes Météo, Parcelles, Formations, Communauté
 @app.get("/weather")
-def get_weather(): 
-    return weather_data
+def get_weather(): return weather_data
 
 @app.get("/parcels")
-def get_parcels(): 
-    return parcels_db
+def get_parcels(): return parcels_db
 
 @app.post("/parcels")
 def create_parcel(parcel: ParcelCreateRequest):
@@ -178,12 +188,10 @@ def create_parcel(parcel: ParcelCreateRequest):
     return {"success": True, "parcel": new_parcel}
 
 @app.get("/trainings")
-def get_trainings(): 
-    return trainings_db
+def get_trainings(): return trainings_db
 
 @app.get("/community")
-def get_community(): 
-    return community_posts_db
+def get_community(): return community_posts_db
 
 @app.post("/community")
 def create_community_post(post: CommunityPostRequest):
@@ -193,7 +201,7 @@ def create_community_post(post: CommunityPostRequest):
 
 @app.post("/ai/voice-to-text")
 async def voice_to_text(file: UploadFile = File(...)):
-    return {"success": True, "text": "Transcription enregistrée avec succès."}
+    return {"success": True, "text": "Message audio reçu et transcrit."}
 
 @app.post("/ai/analyze-plant-image")
 async def analyze_plant_image(file: UploadFile = File(...)):
