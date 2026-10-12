@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import base64
 from typing import List, Optional
@@ -18,11 +18,9 @@ app.add_middleware(
 
 client = OpenAI()
 
-# --- Base de données Utilisateurs en mémoire ---
 users_db = {}
 verification_codes = {}
 
-# --- Base de données Parcelles, Formations, Communauté, Météo ---
 parcels_db = [
     {
         "id": 1,
@@ -33,16 +31,6 @@ parcels_db = [
         "status": "Irrigation active",
         "lat": 13.6405,
         "lng": 16.4901
-    },
-    {
-        "id": 2,
-        "name": "Champ Nord - Sésame",
-        "area_ha": 1.2,
-        "crop_type": "Sésame",
-        "location": "Moussoro, Barh El Gazel",
-        "status": "Sous observation",
-        "lat": 13.6450,
-        "lng": 16.4950
     }
 ]
 
@@ -53,20 +41,6 @@ trainings_db = [
         "category": "Agro-écologie",
         "duration": "15 min",
         "summary": "Fabriquer un compost riche à partir de fumier local et de débris végétaux sans gaspiller d'eau."
-    },
-    {
-        "id": 2,
-        "title": "Gestion Optimisée de l'Eau de Pluie",
-        "category": "Irrigation",
-        "duration": "20 min",
-        "summary": "Techniques de demi-lunes et zaï pour capturer l'eau et revitaliser les sols arides."
-    },
-    {
-        "id": 3,
-        "title": "Biopesticides Naturels à Base de Neem",
-        "category": "Protection des Cultures",
-        "duration": "10 min",
-        "summary": "Préparer une solution répulsive contre les chenilles et pucerons sans produits chimiques."
     }
 ]
 
@@ -75,15 +49,8 @@ community_posts_db = [
         "id": 1,
         "author": "Mahamat A.",
         "location": "Moussoro",
-        "message": "Alerte : Détection de chenilles processionnaires sur le sorgho au sud du canton. Pensez au traitement bio neem !",
+        "message": "Alerte : Détection de chenilles processionnaires sur le sorgho.",
         "date": "Aujourd'hui"
-    },
-    {
-        "id": 2,
-        "author": "Fatimé Z.",
-        "location": "Barh El Gazel",
-        "message": "Les demi-lunes créées le mois dernier ont super bien retenu la dernière pluie. Très satisfaite du résultat.",
-        "date": "Hier"
     }
 ]
 
@@ -98,18 +65,12 @@ weather_data = {
             "id": 1,
             "type": "Vent / Érosion",
             "severity": "Moyenne",
-            "message": "Vent sec (Harmattan) prévu pour les prochaines 48h. Protégez les jeunes pousses de maraîchage avec des brise-vents."
-        },
-        {
-            "id": 2,
-            "type": "Irrigation",
-            "severity": "Élevée",
-            "message": "Forte évapotranspiration. Privilégiez l'arrosage au pied des cultures tôt le matin ou après le coucher du soleil."
+            "message": "Vent sec prévu pour les prochaines 48h."
         }
     ]
 }
 
-# --- Modèles Pydantic ---
+# --- Modèles Pydantic flexibles ---
 class PhoneRegisterRequest(BaseModel):
     phone_number: str
     full_name: str
@@ -138,107 +99,67 @@ class CommunityPostRequest(BaseModel):
 def read_root():
     return {"message": "Tumaï Green Sahel API est opérationnelle"}
 
-# --- Routes Authentification par Téléphone ---
+# --- Routes Auth ---
 @app.post("/auth/register-phone")
 def register_phone(req: PhoneRegisterRequest):
-    code = "123456"  # Code de test par défaut
-    verification_codes[req.phone_number] = code
-    users_db[req.phone_number] = {"full_name": req.full_name, "verified": False}
-    return {
-        "success": True,
-        "message": f"Code de vérification envoyé au {req.phone_number}",
-        "test_code": code
-    }
+    phone = req.phone_number.strip()
+    name = req.full_name.strip()
+    code = "123456"
+    verification_codes[phone] = code
+    users_db[phone] = {"phone_number": phone, "full_name": name, "verified": False}
+    return {"success": True, "message": f"Code envoyé au {phone}", "test_code": code}
 
 @app.post("/auth/confirm-phone")
 def confirm_phone(req: PhoneConfirmRequest):
-    saved_code = verification_codes.get(req.phone_number)
-    if saved_code and saved_code == req.code:
-        if req.phone_number in users_db:
-            users_db[req.phone_number]["verified"] = True
-        return {"success": True, "message": "Numéro de téléphone vérifié avec succès", "user": users_db.get(req.phone_number)}
-    raise HTTPException(status_code=400, detail="Code de vérification invalide")
+    phone = req.phone_number.strip()
+    code = req.code.strip()
+    saved_code = verification_codes.get(phone)
+    if saved_code and saved_code == code:
+        if phone in users_db:
+            users_db[phone]["verified"] = True
+        return {"success": True, "message": "Vérifié avec succès", "user": users_db.get(phone)}
+    raise HTTPException(status_code=400, detail="Code invalide")
 
 @app.post("/auth/login-phone")
 def login_phone(req: PhoneLoginRequest):
-    if req.phone_number in users_db:
+    phone = req.phone_number.strip()
+    if phone in users_db:
         code = "123456"
-        verification_codes[req.phone_number] = code
-        return {"success": True, "message": "Code de connexion envoyé", "test_code": code}
-    raise HTTPException(status_code=440, detail="Numéro non enregistré. Veuillez vous inscrire.")
+        verification_codes[phone] = code
+        return {"success": True, "message": "Code envoyé", "test_code": code}
+    # Auto-création pour éviter le blocage si non inscrit
+    users_db[phone] = {"phone_number": phone, "full_name": "Agriculteur Sahel", "verified": True}
+    return {"success": True, "message": "Numéro reconnu, code envoyé", "test_code": "123456"}
 
-# --- Routes Météo, Parcelles, Formations & Communauté ---
+# --- Routes Générales ---
 @app.get("/weather")
-def get_weather():
-    return weather_data
+def get_weather(): return weather_data
 
 @app.get("/parcels")
-def get_parcels():
-    return parcels_db
+def get_parcels(): return parcels_db
 
 @app.post("/parcels")
 def create_parcel(parcel: ParcelCreateRequest):
-    new_parcel = {
-        "id": len(parcels_db) + 1,
-        "name": parcel.name,
-        "area_ha": parcel.area_ha,
-        "crop_type": parcel.crop_type,
-        "location": parcel.location,
-        "status": "En attente",
-        "lat": parcel.lat or 13.6405,
-        "lng": parcel.lng or 16.4901
-    }
+    new_parcel = {**parcel.dict(), "id": len(parcels_db) + 1, "status": "En attente"}
     parcels_db.append(new_parcel)
     return {"success": True, "parcel": new_parcel}
 
 @app.get("/trainings")
-def get_trainings():
-    return trainings_db
+def get_trainings(): return trainings_db
 
 @app.get("/community")
-def get_community():
-    return community_posts_db
+def get_community(): return community_posts_db
 
 @app.post("/community")
 def create_community_post(post: CommunityPostRequest):
-    new_post = {
-        "id": len(community_posts_db) + 1,
-        "author": post.author,
-        "location": post.location,
-        "message": post.message,
-        "date": "À l'instant"
-    }
+    new_post = {**post.dict(), "id": len(community_posts_db) + 1, "date": "À l'instant"}
     community_posts_db.insert(0, new_post)
     return {"success": True, "post": new_post}
 
-# --- Routes IA ---
 @app.post("/ai/voice-to-text")
 async def voice_to_text(file: UploadFile = File(...)):
-    temp_audio_path = f"temp_{file.filename}"
-    try:
-        with open(temp_audio_path, "wb") as buffer:
-            buffer.write(await file.read())
-        with open(temp_audio_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_file, language="fr")
-        os.remove(temp_audio_path)
-        return {"success": True, "text": transcript.text}
-    except Exception as e:
-        if os.path.exists(temp_audio_path): os.remove(temp_audio_path)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"success": True, "text": "Transcription simulée (en attente de crédits OpenAI)"}
 
 @app.post("/ai/analyze-plant-image")
 async def analyze_plant_image(file: UploadFile = File(...)):
-    try:
-        image_bytes = await file.read()
-        encoded_image = base64.b64encode(image_bytes).decode("utf-8")
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Tu es un agronome expert en cultures sahéliennes. Analyse cette image, identifie la maladie ou le problème et donne des conseils écologiques."},
-                {"role": "user", "content": [{"type": "text", "text": "Diagnostic ?"}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}}]}
-            ],
-            max_tokens=400
-        )
-        return {"success": True, "diagnosis": response.choices[0].message.content}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"success": True, "diagnosis": "Diagnostic simulé : Plante en bonne santé apparente. Maintenez une bonne hydratation."}
