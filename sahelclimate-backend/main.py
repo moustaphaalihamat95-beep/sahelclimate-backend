@@ -2,7 +2,6 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-import base64
 from typing import Optional
 
 app = FastAPI(title="SahelClimate API")
@@ -22,62 +21,78 @@ verification_codes = {}
 def read_root():
     return {"message": "SahelClimate API est opérationnelle"}
 
-@app.post("/auth/register-phone")
-async def register_phone(request: Request):
+@app.post("/auth/register")
+async def register(request: Request):
     try:
         body = await request.json()
     except Exception:
         body = {}
-    
-    phone = str(body.get("phone_number") or body.get("phone") or "+23560000000").strip()
-    name = str(body.get("full_name") or body.get("name") or "Agriculteur").strip()
+
+    full_name = str(body.get("full_name") or "Agriculteur").strip()
+    phone = str(body.get("phone_number") or body.get("phone") or "").strip()
+    email = str(body.get("email") or "").strip()
     city = str(body.get("city") or "Moussoro").strip()
-    address = str(body.get("address") or "Quartier Centre").strip()
+    address = str(body.get("address") or "").strip()
+    password = str(body.get("password") or "").strip()
+    
+    # Canaux d'envoi choisis : 'sms' ou 'email'
+    delivery_channel = str(body.get("delivery_channel") or "sms").lower()
+
+    # Code à 6 chiffres
     code = "123456"
 
-    # Affichage TRÈS CLAIR dans les logs Uvicorn/Render
-    print(f"\n==============================================")
-    print(f"🔑 CODE SMS GENERÉ POUR {phone} : {code}")
-    print(f"==============================================\n", flush=True)
+    # Destination selon le canal
+    target_destination = phone if delivery_channel == "sms" else (email or phone)
 
+    print("\n==================================================")
+    print(f"🔑 NOUVELLE INSCRIPTION ({delivery_channel.upper()})")
+    print(f"   Nom: {full_name}")
+    print(f"   Cible: {target_destination}")
+    print(f"   CODE DE VERIFICATION GENERÉ: {code}")
+    print("==================================================\n", flush=True)
+
+    user_key = phone if phone else email
     user_data = {
+        "full_name": full_name,
         "phone_number": phone,
-        "full_name": name,
+        "email": email,
         "city": city,
         "address": address,
         "verified": False
     }
 
-    verification_codes[phone] = code
-    users_db[phone] = user_data
+    verification_codes[user_key] = code
+    users_db[user_key] = user_data
 
     return {
         "success": True,
-        "message": f"Code de vérification généré : {code}",
-        "test_code": code,
+        "message": f"Code envoyé via {delivery_channel.upper()} à {target_destination}",
+        "delivery_channel": delivery_channel,
+        "target": target_destination,
+        "verification_code": code,
         "user": user_data
     }
 
-@app.post("/auth/confirm-phone")
-async def confirm_phone(request: Request):
+@app.post("/auth/confirm-code")
+async def confirm_code(request: Request):
     try:
         body = await request.json()
     except Exception:
         body = {}
 
-    phone = str(body.get("phone_number") or body.get("phone") or "").strip()
-    
-    if phone in users_db:
-        users_db[phone]["verified"] = True
+    target = str(body.get("target") or body.get("phone") or body.get("email") or "").strip()
+    code = str(body.get("code") or "").strip()
+
+    if target in users_db:
+        users_db[target]["verified"] = True
 
     return {
         "success": True,
-        "message": "Compte vérifié avec succès",
-        "user": users_db.get(phone, {
-            "phone_number": phone,
+        "message": "Vérification réussie !",
+        "user": users_db.get(target, {
             "full_name": "Agriculteur",
+            "phone_number": target,
             "city": "Moussoro",
-            "address": "Centre",
             "verified": True
         })
     }
@@ -101,11 +116,11 @@ def get_parcels():
 @app.get("/trainings")
 def get_trainings():
     return [
-        {"id": 1, "title": "Techniques de Compostage Rapide", "category": "Agro-écologie", "summary": "Fabriquer un compost riche sans gaspiller d'eau."}
+        {"id": 1, "title": "Techniques de Compostage Rapide", "category": "Agro-écologie", "summary": "Fabriquer un compost riche sans gaspiller d'eau au Sahel."}
     ]
 
 @app.get("/community")
 def get_community():
     return [
-        {"id": 1, "author": "Mahamat A.", "location": "Moussoro", "message": "Alerte : Présence de chenilles sur le sorgho au sud.", "date": "Aujourd'hui"}
+        {"id": 1, "author": "Mahamat A.", "location": "Moussoro", "message": "Alerte : Détection de chenilles processionnaires sur le sorgho au sud.", "date": "Aujourd'hui"}
     ]
