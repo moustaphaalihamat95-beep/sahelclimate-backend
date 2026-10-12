@@ -1,8 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import random
 import os
 import base64
 from typing import List, Optional
@@ -20,7 +18,11 @@ app.add_middleware(
 
 client = OpenAI()
 
-# --- Base de données Parcelles avec Coordonnées GPS ---
+# --- Base de données Utilisateurs en mémoire ---
+users_db = {}
+verification_codes = {}
+
+# --- Base de données Parcelles, Formations, Communauté, Météo ---
 parcels_db = [
     {
         "id": 1,
@@ -108,6 +110,17 @@ weather_data = {
 }
 
 # --- Modèles Pydantic ---
+class PhoneRegisterRequest(BaseModel):
+    phone_number: str
+    full_name: str
+
+class PhoneConfirmRequest(BaseModel):
+    phone_number: str
+    code: str
+
+class PhoneLoginRequest(BaseModel):
+    phone_number: str
+
 class ParcelCreateRequest(BaseModel):
     name: str
     area_ha: float
@@ -125,6 +138,36 @@ class CommunityPostRequest(BaseModel):
 def read_root():
     return {"message": "Tumaï Green Sahel API est opérationnelle"}
 
+# --- Routes Authentification par Téléphone ---
+@app.post("/auth/register-phone")
+def register_phone(req: PhoneRegisterRequest):
+    code = "123456"  # Code de test par défaut
+    verification_codes[req.phone_number] = code
+    users_db[req.phone_number] = {"full_name": req.full_name, "verified": False}
+    return {
+        "success": True,
+        "message": f"Code de vérification envoyé au {req.phone_number}",
+        "test_code": code
+    }
+
+@app.post("/auth/confirm-phone")
+def confirm_phone(req: PhoneConfirmRequest):
+    saved_code = verification_codes.get(req.phone_number)
+    if saved_code and saved_code == req.code:
+        if req.phone_number in users_db:
+            users_db[req.phone_number]["verified"] = True
+        return {"success": True, "message": "Numéro de téléphone vérifié avec succès", "user": users_db.get(req.phone_number)}
+    raise HTTPException(status_code=400, detail="Code de vérification invalide")
+
+@app.post("/auth/login-phone")
+def login_phone(req: PhoneLoginRequest):
+    if req.phone_number in users_db:
+        code = "123456"
+        verification_codes[req.phone_number] = code
+        return {"success": True, "message": "Code de connexion envoyé", "test_code": code}
+    raise HTTPException(status_code=440, detail="Numéro non enregistré. Veuillez vous inscrire.")
+
+# --- Routes Météo, Parcelles, Formations & Communauté ---
 @app.get("/weather")
 def get_weather():
     return weather_data
@@ -168,6 +211,7 @@ def create_community_post(post: CommunityPostRequest):
     community_posts_db.insert(0, new_post)
     return {"success": True, "post": new_post}
 
+# --- Routes IA ---
 @app.post("/ai/voice-to-text")
 async def voice_to_text(file: UploadFile = File(...)):
     temp_audio_path = f"temp_{file.filename}"
