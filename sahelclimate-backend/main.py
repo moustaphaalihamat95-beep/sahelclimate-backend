@@ -13,7 +13,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "SahelClimate API est opérationnelle"}
+    return {"message": "API Tumaï Green Sahel opérationnelle"}
 
 @app.post("/auth/register")
 async def register(request: Request):
@@ -33,7 +33,7 @@ async def register(request: Request):
     target_destination = phone if delivery_channel == "sms" else (email or phone)
 
     print(f"\n==============================================")
-    print(f"🔑 CODE DE VALIDATION POUR {target_destination} : {code}")
+    print(f"🔑 CODE GENERÉ POUR {target_destination} : {code}")
     print(f"==============================================\n", flush=True)
 
     user_data = {
@@ -72,11 +72,11 @@ def get_parcels():
 @app.get("/trainings")
 def get_trainings():
     return [
-        {"id": 1, "title": "Techniques de Compostage Rapide", "category": "Agro-écologie", "summary": "Fabriquer un compost riche sans gaspiller d'eau."}
+        {"id": 1, "title": "Techniques de Compostage Rapide", "category": "Agro-écologie", "summary": "Fabriquer un compost riche sans gaspiller d'eau au Sahel."}
     ]
 
 @app.get("/community")
 def get_community():
     return [
-        {"id": 1, "author": "Mahamat A.", "location": "Moussoro", "message": "Alerte : Présence de chenilles sur le sorgho.", "date": "Aujourd'hui"}
+        {"id": 1, "author": "Mahamat A.", "location": "Moussoro", "message": "Alerte : Détection de chenilles processionnaires sur le sorgho.", "date": "Aujourd'hui"}
     ]
